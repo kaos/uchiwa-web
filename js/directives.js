@@ -43,7 +43,8 @@ directiveModule.directive('panelActions', ['$rootScope', function ($rootScope) {
       refreshLegend: '@',
       resolveFn: '=',
       resolveLegend: '@',
-      silenceFn: '='
+      silenceFn: '=',
+      watchFn: '='
     },
     templateUrl: $rootScope.partialsPath + '/panel/actions.html'
   };

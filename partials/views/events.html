@@ -15,7 +15,7 @@
               <!--dc-->
               <ng-include src="partialsPath + '/panel/dc.html'"></ng-include>
               <!--actions-->
-              <panel-actions data="events" resolve-fn="resolveEvents" resolve-legend="Resolve" silence-fn="silenceEvents" ng-if="!user.isReadOnly()"></panel-actions>
+              <panel-actions data="events" resolve-fn="resolveEvents" resolve-legend="Resolve" silence-fn="silenceEvents" watch-fn="watchEvents" ng-if="!user.isReadOnly()"></panel-actions>
               <!--hide-->
               <ng-include src="partialsPath + '/panel/hide.html'"></ng-include>
               <!--checks-->

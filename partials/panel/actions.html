@@ -21,5 +21,11 @@
         Silence/Unsilence
       </a>
     </li>
+    <li ng-if="watchFn">
+      <a href="" ng-click="watchFn($event, data)">
+        <i class="fa fa-binoculars fa-fw"></i>
+        Watch/Unwatch
+      </a>
+    </li>
   </ul>
 </div>

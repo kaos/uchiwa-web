@@ -283,7 +283,7 @@ serviceModule.service('stashesService', ['backendService', 'conf', '$filter', '$
           $rootScope.$emit('notification', 'success', 'The stash has been deleted.');
         })
         .error(function (error) {
-          $rootScope.$emit('notification', 'error', 'The stash was not created.');
+          $rootScope.$emit('notification', 'error', 'The stash was not deleted.');
           console.error(error);
         });
     };
@@ -393,7 +393,7 @@ serviceModule.service('stashesService', ['backendService', 'conf', '$filter', '$
             element.acknowledged = !element.acknowledged;
           })
           .error(function (error) {
-            $rootScope.$emit('notification', 'error', 'The stash was not created. ' + error);
+            $rootScope.$emit('notification', 'error', 'The stash was not deleted. ' + error);
           });
       }
       else {
@@ -421,6 +421,161 @@ serviceModule.service('stashesService', ['backendService', 'conf', '$filter', '$
           })
           .error(function (error) {
             $rootScope.$emit('notification', 'error', 'The stash was not created. ' + error);
+          });
+      }
+    };
+}]);
+
+/**
+* Watches
+*/
+serviceModule.service('watchesService', ['backendService', 'conf', '$filter', '$modal', '$rootScope',
+  function (backendService, conf, $filter, $modal, $rootScope) {
+    this.deleteWatch = function (id) {
+      return backendService.deleteStash(id)
+        .success(function () {
+          $rootScope.$emit('notification', 'success', 'The watch has been deleted.');
+        })
+        .error(function (error) {
+          $rootScope.$emit('notification', 'error', 'The watch was not deleted. ' + error);
+          console.error(error);
+        });
+    };
+    this.find = function(watches, item) {
+      var path = this.getPath(item);
+      return _.findWhere(watches, {
+        dc: item.dc,
+        path: path
+      });
+    };
+    this.get = function(watches, id) {
+      for (var i = 0, len = watches.length; i < len; i++) {
+        if (angular.isObject(watches[i]) && angular.isDefined(watches[i]._id)) {
+          if (watches[i]._id === id) {
+            return watches[i];
+          }
+        }
+      }
+      return null;
+    };
+    this.getExpirationFromDateRange = function(watch) {
+      if (angular.isUndefined(watch) || !angular.isObject(watch) || angular.isUndefined(watch.content) || !angular.isObject(watch.content)) {
+        return watch;
+      }
+
+      var now = moment();
+      var start = now.format(conf.date);
+      var end = moment(watch.content.to);
+      var amDifference = $filter('amDifference');
+      var diff = amDifference(end, start, 'seconds');
+
+      watch.content.timestamp = now.unix();
+      watch.expiration = diff;
+      return watch;
+    };
+    this.getPath = function(item, id) {
+      var path = ['watch'];
+      var hasCheck = true;
+
+      // get client name
+      if (angular.isUndefined(item) || !angular.isObject(item)) {
+        $rootScope.$emit('notification', 'error', 'Cannot handle this watch. Try to refresh the page.');
+        return false;
+      }
+
+      path.push(id || '')
+
+      if (angular.isUndefined(item.client)) {
+        path.push(item.name);
+        hasCheck = false;
+      }
+      else {
+        if (angular.isObject(item.client)) {
+          path.push(item.client.name);
+        }
+        else {
+          path.push(item.client);
+        }
+      }
+
+      // get check name
+      if (hasCheck && angular.isDefined(item.check)) {
+        if (angular.isObject(item.check)) {
+          path.push(item.check.name);
+        }
+        else {
+          path.push(item.check);
+        }
+      }
+
+      return path.join('/');
+    };
+    this.watch = function (e, i) {
+      var items = _.isArray(i) ? i : new Array(i);
+      var event = e || window.event;
+      if (angular.isDefined(event)) {
+        event.stopPropagation();
+      }
+
+      if (items.length === 0) {
+        $rootScope.$emit('notification', 'error', 'No items selected');
+      } else {
+        var modalInstance = $modal.open({ // jshint ignore:line
+          templateUrl: $rootScope.partialsPath + '/watch-modal.html',
+          controller: 'WatchModalController',
+          resolve: {
+            items: function () {
+              return items;
+            }
+          }
+        });
+      }
+    };
+    this.submit = function (element, item) {
+      var dc = element.dc;
+      var isAcknowledged = element.acknowledged;
+      var path = this.getPath(element, item.target);
+
+      if (angular.isUndefined(item.message)) {
+        item.message = '';
+      }
+
+      if (isAcknowledged) {
+        return backendService.deleteStash(dc+'/'+path)
+          .success(function () {
+            $rootScope.skipOneRefresh = true;
+            $rootScope.$emit('notification', 'success', 'The watch has been deleted.');
+            element.acknowledged = !element.acknowledged;
+          })
+          .error(function (error) {
+            $rootScope.$emit('notification', 'error', 'The watch was not deleted. ' + error);
+          });
+      }
+      else {
+        var payload = {content: {'message': item.message, 'source': 'uchiwa'}, dc: dc, path: path};
+
+        // add expire attribute
+        if (item.expiration && item.expiration !== -1){
+          payload.expire = item.expiration;
+        }
+
+        // add timestamp attribute
+        if (angular.isUndefined(payload.content.timestamp)) {
+          payload.content.timestamp = Math.floor(new Date()/1000);
+        }
+        else {
+          payload.content.timestamp = item.content.timestamp;
+        }
+
+        // post payload
+        return backendService.postStash(payload)
+          .success(function () {
+            $rootScope.skipOneRefresh = true;
+            $rootScope.$emit('notification', 'success', 'The watch has been created.');
+            element.acknowledged = !element.acknowledged;
+          })
+          .error(function (error) {
+            $rootScope.$emit('notification', 'error', 'The watch was not created. ' + error);
           });
       }
     };

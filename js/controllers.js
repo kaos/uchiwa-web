@@ -94,8 +94,8 @@ controllerModule.controller('AggregatesController', ['filterService', '$routePar
 /**
 * Checks
 */
-controllerModule.controller('ChecksController', ['checksService', '$filter', 'filterService', 'helperService', '$routeParams', 'routingService', '$scope', 'Sensu', 'titleFactory',
-  function (checksService, $filter, filterService, helperService, $routeParams, routingService, $scope, Sensu, titleFactory) {
+controllerModule.controller('ChecksController', ['checksService', '$filter', 'filterService', 'helperService', '$routeParams', 'routingService', '$scope', 'Sensu', 'titleFactory', 'watchesService',
+  function (checksService, $filter, filterService, helperService, $routeParams, routingService, $scope, Sensu, titleFactory, watchesService) {
     $scope.pageHeaderText = 'Checks';
     titleFactory.set($scope.pageHeaderText);
 
@@ -143,6 +143,9 @@ controllerModule.controller('ChecksController', ['checksService', '$filter', 'fi
       angular.forEach(items, function(item) {
         checksService.issueCheckRequest(item.name, item.dc, item.subscribers);
       });
+    };
+    $scope.watchChecks = function() {
+      helperService.silenceItems(watchesService.watch, $scope.filtered, $scope.selected);
     };
 
     var updateFilters = function() {
@@ -255,8 +258,8 @@ controllerModule.controller('ClientController', ['backendService', 'clientsServi
 /**
 * Clients
 */
-controllerModule.controller('ClientsController', ['clientsService', '$filter', 'filterService', 'helperService', '$rootScope', '$routeParams', 'routingService', '$scope', 'Sensu', 'stashesService', 'titleFactory', 'userService',
-  function (clientsService, $filter, filterService, helperService, $rootScope, $routeParams, routingService, $scope, Sensu, stashesService, titleFactory, userService) {
+controllerModule.controller('ClientsController', ['clientsService', '$filter', 'filterService', 'helperService', '$rootScope', '$routeParams', 'routingService', '$scope', 'Sensu', 'stashesService', 'watchesService', 'titleFactory', 'userService',
+  function (clientsService, $filter, filterService, helperService, $rootScope, $routeParams, routingService, $scope, Sensu, stashesService, watchesService, titleFactory, userService) {
     $scope.pageHeaderText = 'Clients';
     titleFactory.set($scope.pageHeaderText);
 
@@ -314,6 +317,9 @@ controllerModule.controller('ClientsController', ['clientsService', '$filter', '
     $scope.silenceClients = function() {
       helperService.silenceItems(stashesService.stash, $scope.filtered, $scope.selected);
     };
+    $scope.watchClients = function() {
+      helperService.silenceItems(watchesService.watch, $scope.filtered, $scope.selected);
+    };
 
     var updateFilters = function() {
       var filtered = $filter('filter')($scope.clients, {dc: $scope.filters.dc}, $scope.filterComparator);
@@ -345,8 +351,8 @@ controllerModule.controller('DatacentersController', ['$scope', 'Sensu', 'titleF
 /**
 * Events
 */
-controllerModule.controller('EventsController', ['clientsService', 'conf', '$cookieStore', '$filter', 'filterService', 'helperService', '$rootScope', '$routeParams','routingService', '$scope', 'Sensu', 'stashesService', 'titleFactory', 'userService',
-  function (clientsService, conf, $cookieStore, $filter, filterService, helperService, $rootScope, $routeParams, routingService, $scope, Sensu, stashesService, titleFactory, userService) {
+controllerModule.controller('EventsController', ['clientsService', 'conf', '$cookieStore', '$filter', 'filterService', 'helperService', '$rootScope', '$routeParams','routingService', '$scope', 'Sensu', 'stashesService', 'watchesService', 'titleFactory', 'userService',
+  function (clientsService, conf, $cookieStore, $filter, filterService, helperService, $rootScope, $routeParams, routingService, $scope, Sensu, stashesService, watchesService, titleFactory, userService) {
     $scope.pageHeaderText = 'Events';
     titleFactory.set($scope.pageHeaderText);
 
@@ -397,6 +403,9 @@ controllerModule.controller('EventsController', ['clientsService', 'conf', '$coo
     };
     $scope.silenceEvents = function() {
       helperService.silenceItems(stashesService.stash, $scope.filtered, $scope.selected);
+    };
+    $scope.watchEvents = function() {
+      helperService.silenceItems(watchesService.watch, $scope.filtered, $scope.selected);
     };
 
     var updateFilters = function() {
@@ -671,6 +680,65 @@ controllerModule.controller('StashModalController', ['conf', '$filter', 'items',
     // Services
     $scope.findStash = stashesService.find;
     $scope.getPath = stashesService.getPath;
+  }
+]);
+
+/**
+* Watch Modal
+*/
+controllerModule.controller('WatchModalController', ['conf', '$filter', 'items', '$modalInstance', 'notification', '$q', '$scope', 'watchesService',
+  function (conf, $filter, items, $modalInstance, notification, $q, $scope, watchesService) {
+    $scope.items = items;
+    $scope.acknowledged = $filter('filter')(items, {acknowledged: true}).length;
+    $scope.itemType = items[0].hasOwnProperty('client') ? 'check' : 'client';
+    $scope.watch = { 'content': {} };
+    $scope.watch.expirations = {
+      '900': 900,
+      '3600': 3600,
+      '86400': 86400,
+      'none': -1,
+      'custom': 'custom'
+    };
+    $scope.watch.message = '';
+    $scope.watch.expiration = 900;
+    $scope.watch.content.to = moment().add(1, 'h').format(conf.date);
+
+
+    $scope.ok = function () {
+      if ($scope.watch.expiration === 'custom') {
+        if (angular.isUndefined($scope.watch.content.to)) {
+          notification('error', 'Please enter a date for the custom expiration.');
+          return false;
+        }
+        $scope.watch = watchesService.getExpirationFromDateRange($scope.watch);
+      }
+
+      if (!$scope.watch.target) {
+        notification('error', 'Please enter watcher name or address');
+        return false;
+      }
+
+      var promises = [];
+      angular.forEach(items, function(item) {
+        var deffered = $q.defer();
+        watchesService.submit(item, $scope.watch).then(function() {
+          deffered.resolve(item);
+        }, function() {
+          deffered.reject();
+        });
+        promises.push(deffered.promise);
+      });
+      $q.all(promises).then(function() {
+        $modalInstance.close();
+      });
+    };
+    $scope.cancel = function () {
+      $modalInstance.dismiss('cancel');
+    };
+
+    // Services
+    $scope.findWatch = watchesService.find;
+    $scope.getPath = watchesService.getPath;
   }
 ]);
 
